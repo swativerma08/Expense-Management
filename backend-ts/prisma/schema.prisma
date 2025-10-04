@@ -1,0 +1,172 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Company {
+  id               String   @id @default(uuid())
+  name             String
+  country          String
+  defaultCurrency  String   @map("default_currency")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  users            User[]
+  expenses         Expense[]
+  approvalRules    ApprovalRule[]
+  auditLogs        AuditLog[]
+
+  @@map("companies")
+}
+
+model User {
+  id           String    @id @default(uuid())
+  companyId    String    @map("company_id")
+  name         String
+  email        String    @unique
+  passwordHash String    @map("password_hash")
+  role         String
+  managerId    String?   @map("manager_id")
+  isActive     Boolean   @default(true) @map("is_active")
+  lastLoginAt  DateTime? @map("last_login_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  company           Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  manager           User?         @relation("UserManager", fields: [managerId], references: [id])
+  subordinates      User[]        @relation("UserManager")
+  expenses          Expense[]
+  approvalSteps     ApprovalStep[]
+  auditLogs         AuditLog[]
+  specificRules     ApprovalRule[] @relation("SpecificApprover")
+
+  @@map("users")
+}
+
+model Expense {
+  id               String        @id @default(uuid())
+  companyId        String        @map("company_id")
+  userId           String        @map("user_id")
+  originalCurrency String        @map("original_currency")
+  originalAmount   Float         @map("original_amount")
+  convertedAmount  Float?        @map("converted_amount")
+  conversionRate   Float?        @map("conversion_rate")
+  rateTimestamp    DateTime?     @map("rate_timestamp")
+  date             DateTime
+  category         String
+  description      String?
+  receiptUrl       String?       @map("receipt_url")
+  status           String        @default("DRAFT")
+  submittedAt      DateTime?     @map("submitted_at")
+  createdAt        DateTime      @default(now()) @map("created_at")
+  updatedAt        DateTime      @updatedAt @map("updated_at")
+
+  // Relations
+  company       Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  approvalSteps ApprovalStep[]
+  ocrRecords    OCRRecord[]
+  auditLogs     AuditLog[]
+
+  @@map("expenses")
+}
+
+model ApprovalStep {
+  id            String           @id @default(uuid())
+  expenseId     String           @map("expense_id")
+  approverId    String           @map("approver_id")
+  sequenceIndex Int              @map("sequence_index")
+  status        String         @default("PENDING")
+  actionBy      String?          @map("action_by")
+  actionAt      DateTime?        @map("action_at")
+  comments      String?
+  createdAt     DateTime         @default(now()) @map("created_at")
+  updatedAt     DateTime         @updatedAt @map("updated_at")
+
+  // Relations
+  expense   Expense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  approver  User    @relation(fields: [approverId], references: [id], onDelete: Cascade)
+
+  @@unique([expenseId, approverId])
+  @@map("approval_steps")
+}
+
+model ApprovalRule {
+  id                   String             @id @default(uuid())
+  companyId            String             @map("company_id")
+  name                 String
+  type                 String
+  thresholdPercent     Int?               @map("threshold_percent")
+  specificApproverId   String?            @map("specific_approver_id")
+  appliesToCategory    String?            @map("applies_to_category")
+  minAmount            Float?             @map("min_amount")
+  maxAmount            Float?             @map("max_amount")
+  isActive             Boolean            @default(true) @map("is_active")
+  priority             Int                @default(0)
+  createdAt            DateTime           @default(now()) @map("created_at")
+  updatedAt            DateTime           @updatedAt @map("updated_at")
+
+  // Relations
+  company           Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  specificApprover  User?   @relation("SpecificApprover", fields: [specificApproverId], references: [id])
+
+  @@map("approval_rules")
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  entity    String
+  entityId  String   @map("entity_id")
+  action    String
+  byUserId  String   @map("by_user_id")
+  companyId String   @map("company_id")
+  snapshot  String?
+  changes   String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  byUser    User    @relation(fields: [byUserId], references: [id])
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  expense   Expense? @relation(fields: [entityId], references: [id])
+
+  @@map("audit_logs")
+}
+
+model OCRRecord {
+  id         String    @id @default(uuid())
+  expenseId  String    @map("expense_id")
+  fileUrl    String    @map("file_url")
+  parsedJson String?   @map("parsed_json")
+  confidence Float?
+  status     String    @default("PENDING")
+  errorMsg   String?   @map("error_msg")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  expense Expense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+
+  @@map("ocr_records")
+}
+
+model ExchangeRate {
+  id             String   @id @default(uuid())
+  baseCurrency   String   @map("base_currency")
+  targetCurrency String   @map("target_currency")
+  rate           Float    @map("rate")
+  timestamp      DateTime
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@unique([baseCurrency, targetCurrency, timestamp])
+  @@map("exchange_rates")
+}
+

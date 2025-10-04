@@ -1,0 +1,9 @@
+dist/
+*.db
+*.db-journal
+.env
+node_modules/
+logs/
+*.log
+coverage/
+.nyc_output
